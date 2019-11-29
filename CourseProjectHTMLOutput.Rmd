@@ -1,0 +1,166 @@
+---
+title: "CourseProject"
+author: "Alex Segal"
+date: "11/28/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Course Project
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Data
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. 
+
+## Initialization
+
+Load packages
+
+```{r}
+library(caret)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(skimr)
+library(visdat)
+library(DataExplorer)
+library(inspectdf)
+```
+
+Load training data/ validation data
+
+```{r}
+buildingData <- read.csv("pml-training.csv")
+validationData <- read.csv("pml-testing.csv")
+```
+
+For reproducibility set a seed
+```{r}
+set.seed(12345)
+```
+Split the buildingData to Train set and Test set
+```{r}
+training_sample <- createDataPartition(y=buildingData$classe, p=0.7, list=FALSE)
+trainingData <- buildingData[training_sample, ]
+testData <- buildingData[-training_sample, ]
+```
+
+
+## Exploratory Data analysis
+In this section we will clean, prepare and manipulate data.
+
+
+Check the structure of the file
+```{r warning=FALSE}
+skim(trainingData)
+```
+
+Inspect the types of the variables
+```{r}
+typesdf <- inspect_types(trainingData)
+show_plot(typesdf)
+```
+
+Inspect the NAs in the dataset
+```{r}
+nadf <- inspect_na(trainingData)
+```
+It can be easily seen that some of the variables have NA in the most of the entries.
+We will have to remove these variables from the datasets.
+
+
+
+Number of raws in the training dataset
+```{r}
+Len_train <- dim(trainingData)[1]
+```
+
+
+Select the variables that don't contain information in most of the entries.
+```{r}
+SelectVoidCols1 <- which(colSums(is.na(trainingData) |trainingData=="")>0.75*Len_train)
+```
+Remove the unnecesary variables from the data set
+```{r}
+trainingData1 <- trainingData[,-SelectVoidCols1]
+```
+As well remove all the unnecesary columns, like X, timestamps etc.
+```{r}
+trainingData2 <- trainingData1[,-c(1:7)]
+```
+
+
+Remove from the TEST data set the same variables that were removed from the train data set.
+```{r}
+testData1 <- testData[,-SelectVoidCols1]
+testData2 <- testData1[,-c(1:7)]
+```
+
+
+## Training the model
+
+
+### Cross Validation
+We use repeated 10 fold cross-validation in order to tune the algorithms parameters
+
+```{r}
+trcont <- trainControl(method="repeatedcv", number=5, repeats=1)
+```
+
+
+The first model we will train is the RandomForest
+```{r}
+model.RF <- train(classe~., data=trainingData2, method="rf" ,trControl=trcont, verbose=FALSE)
+print(model.RF)
+```
+
+The second model we will train is the Generailized Boosting Machine (GBM)
+```{r}
+model.GBM <- train(classe~., data=trainingData2, method="gbm" ,trControl=trcont, verbose=FALSE)
+print(model.GBM)
+```
+
+
+##Testing ----
+In this section we will assess the predictions of our model on the test data, i.e. 
+the data that "has not been seen" by our models.
+
+Prediction using random forests
+```{r}
+TestPredict.RF <- predict(model.RF,newdata=testData)
+ConfMat.RF <- confusionMatrix(testData$classe,TestPredict.RF)
+ConfMat.RF$table
+ConfMat.RF$overall[1]
+```
+
+Prediction using GBM
+```{r}
+TestPredict.GBM <- predict(model.GBM,newdata=testData)
+ConfMat.GBM <- confusionMatrix(testData$classe,TestPredict.GBM)
+ConfMat.GBM$table
+ConfMat.GBM$overall[1]
+```
+
+
+## Conlcusion
+The Random Forest method produces more accurate results, therefore it will be used for 
+the Course Project Prediction Quiz as follows
+```{r}
+ValidPredict.GBM <- predict(model.RF,newdata=validationData)
+Results <- cbind(validationData,Pred=ValidPredict.GBM)[,c(160,161)]
+print(Results)
+```
